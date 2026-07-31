@@ -1,0 +1,9 @@
+SSIG browser interface design notice
+
+The green CRT terminal visual direction is inspired by "AnderShell 3000 -
+Retro looking terminal in CSS" by Anders Evenrud:
+https://github.com/andersevenrud/retro-css-shell-demo
+
+AnderShell 3000 is distributed under the BSD 2-Clause License. SSIG's UI
+implementation was written for this project; this notice acknowledges the
+reference design requested for the interface.
