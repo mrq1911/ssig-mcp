@@ -1,4 +1,5 @@
 import { homedir } from 'node:os';
+import { isIP } from 'node:net';
 import path from 'node:path';
 
 export type TenderlyConfig = {
@@ -8,7 +9,8 @@ export type TenderlyConfig = {
 };
 
 export type AppConfig = {
-  host: '127.0.0.1' | '::1';
+  host: string;
+  publicHost?: string;
   port: number;
   dataFile: string;
   webDirectory: string;
@@ -20,6 +22,16 @@ export type AppConfig = {
   solanaRpcUrls: Record<string, string>;
   suiGrpcUrls: Record<string, string>;
 };
+
+function isPrivateIpv4(value: string): boolean {
+  if (isIP(value) !== 4) return false;
+  const [first, second] = value.split('.').map(Number);
+  return (
+    first === 10 ||
+    (first === 172 && second! >= 16 && second! <= 31) ||
+    (first === 192 && second === 168)
+  );
+}
 
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback;
@@ -77,8 +89,21 @@ function readTenderlyConfig(env: NodeJS.ProcessEnv): TenderlyConfig | undefined 
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const host = env.SSIG_HOST ?? '127.0.0.1';
-  if (host !== '127.0.0.1' && host !== '::1') {
-    throw new Error('SSIG_HOST must be a loopback address (127.0.0.1 or ::1)');
+  const isLoopback = host === '127.0.0.1' || host === '::1';
+  let publicHost: string | undefined;
+  if (!isLoopback) {
+    if (!parseBoolean(env.SSIG_ALLOW_LAN, false)) {
+      throw new Error(
+        'Non-loopback SSIG_HOST requires SSIG_ALLOW_LAN=true and an RFC1918 SSIG_PUBLIC_HOST',
+      );
+    }
+    if (host !== '0.0.0.0' && !isPrivateIpv4(host)) {
+      throw new Error('LAN SSIG_HOST must be 0.0.0.0 or an RFC1918 IPv4 address');
+    }
+    publicHost = env.SSIG_PUBLIC_HOST ?? (host === '0.0.0.0' ? undefined : host);
+    if (!publicHost || !isPrivateIpv4(publicHost)) {
+      throw new Error('SSIG_PUBLIC_HOST must be an RFC1918 IPv4 address in LAN mode');
+    }
   }
 
   const port = Number(env.SSIG_PORT ?? 3721);
@@ -100,6 +125,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   return {
     host,
+    ...(publicHost ? { publicHost } : {}),
     port,
     dataFile: path.join(dataDirectory, 'requests.json'),
     webDirectory,

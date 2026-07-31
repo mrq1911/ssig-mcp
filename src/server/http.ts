@@ -36,22 +36,37 @@ export function isLoopbackHost(rawHost: string | undefined): boolean {
   }
 }
 
+export function isAllowedUiHost(
+  rawHost: string | undefined,
+  publicHost?: string,
+): boolean {
+  if (isLoopbackHost(rawHost)) return true;
+  if (!rawHost || !publicHost) return false;
+  try {
+    return new URL(`http://${rawHost}`).hostname.toLowerCase() === publicHost.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 export function isValidUiToken(expected: string, authorization: string | undefined): boolean {
   const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : '';
   return Boolean(token) && secureEqual(token, expected);
 }
 
-function requireLoopbackHost(request: Request, response: Response, next: NextFunction): void {
-  const rawHost = request.headers.host;
-  if (!rawHost) {
-    response.status(400).json({ error: 'Missing Host header' });
-    return;
-  }
-  if (!isLoopbackHost(rawHost)) {
-    response.status(403).json({ error: 'Non-loopback Host header rejected' });
-    return;
-  }
-  next();
+function requireAllowedHost(service: SigningService) {
+  return (request: Request, response: Response, next: NextFunction): void => {
+    const rawHost = request.headers.host;
+    if (!rawHost) {
+      response.status(400).json({ error: 'Missing Host header' });
+      return;
+    }
+    if (!isAllowedUiHost(rawHost, service.config.publicHost)) {
+      response.status(403).json({ error: 'Host header rejected' });
+      return;
+    }
+    next();
+  };
 }
 
 function requireUiToken(service: SigningService) {
@@ -160,7 +175,7 @@ async function validateCompletionAsync(
 export function createHttpApp(service: SigningService): express.Express {
   const app = express();
   app.disable('x-powered-by');
-  app.use(requireLoopbackHost);
+  app.use(requireAllowedHost(service));
   app.use((_request, response, next) => {
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('Referrer-Policy', 'no-referrer');
@@ -275,7 +290,8 @@ export async function startHttpServer(service: SigningService): Promise<{
   });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Could not determine HTTP port');
-  const displayHost = service.config.host === '::1' ? '[::1]' : service.config.host;
+  const advertisedHost = service.config.publicHost ?? service.config.host;
+  const displayHost = advertisedHost === '::1' ? '[::1]' : advertisedHost;
   const baseUrl = `http://${displayHost}:${address.port}`;
   service.setBaseUrl(baseUrl);
   return { server, baseUrl, port: address.port };

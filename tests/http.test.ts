@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AppConfig } from '../src/server/config.js';
-import { isLoopbackHost, isValidUiToken, validateCompletion } from '../src/server/http.js';
+import {
+  isAllowedUiHost,
+  isLoopbackHost,
+  isValidUiToken,
+  validateCompletion,
+} from '../src/server/http.js';
 import { SigningService } from '../src/server/service.js';
 import { evmRequestInputSchema } from '../src/shared/schema.js';
 import { asciiExplanation } from './fixtures.js';
@@ -73,5 +78,8 @@ describe('HTTP approval API', () => {
     expect(isLoopbackHost('127.0.0.1:3721')).toBe(true);
     expect(isLoopbackHost('localhost:3721')).toBe(true);
     expect(isLoopbackHost('evil.example')).toBe(false);
+    expect(isAllowedUiHost('192.168.77.198:3721', '192.168.77.198')).toBe(true);
+    expect(isAllowedUiHost('192.168.77.199:3721', '192.168.77.198')).toBe(false);
+    expect(isAllowedUiHost('evil.example', '192.168.77.198')).toBe(false);
   });
 });

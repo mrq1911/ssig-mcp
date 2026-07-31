@@ -7,7 +7,7 @@ SSIG is a local MCP-to-browser signing bridge for EVM, Solana, and Sui. An agent
 - Exposes separate MCP tools for EVM, Solana, and Sui transaction requests.
 - Requires an ASCII-only agent explanation for every request.
 - Automatically attempts a dry run before adding the request to the queue.
-- Serves an authenticated approval UI on loopback only.
+- Serves an authenticated approval UI on loopback by default, with explicit RFC1918 LAN mode.
 - Discovers EIP-6963/EIP-1193 EVM wallets, Solana Wallet Standard wallets, and Sui Wallet Standard wallets.
 - Supports `sign` and `sign-and-submit` modes.
 - Persists request state, never keys, in `~/.ssig/requests.json` with owner-only permissions.
@@ -168,9 +168,27 @@ Simulation is point-in-time and provider-dependent. It cannot guarantee later ex
 
 ## Other configuration
 
+### Trusted-LAN access
+
+Loopback is the secure default. To open the approval terminal from another machine on the same
+trusted private network, opt in explicitly and advertise this machine's RFC1918 address:
+
+```bash
+SSIG_HOST=0.0.0.0 \
+SSIG_ALLOW_LAN=true \
+SSIG_PUBLIC_HOST=192.168.1.50 \
+npm start
+```
+
+LAN mode continues to require the random UI bearer token and accepts only loopback or the exact
+`SSIG_PUBLIC_HOST` value in the HTTP `Host` header. It uses plain HTTP, so use only a trusted LAN;
+on shared or hostile networks, keep loopback mode and use an SSH port-forward instead.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `SSIG_HOST` | `127.0.0.1` | Loopback bind address; only `127.0.0.1` and `::1` are accepted. |
+| `SSIG_HOST` | `127.0.0.1` | Bind address. LAN mode accepts `0.0.0.0` or a private IPv4 address. |
+| `SSIG_ALLOW_LAN` | `false` | Required explicit opt-in for non-loopback binding. |
+| `SSIG_PUBLIC_HOST` | — | Exact RFC1918 address advertised and allowed in LAN mode. |
 | `SSIG_PORT` | `3721` | UI/API port. Use `0` to choose a free port. |
 | `SSIG_DATA_DIR` | `~/.ssig` | Persistent request-state directory. |
 | `SSIG_REQUEST_LIMIT` | `1000` | Maximum retained requests; pending requests are never pruned. |
@@ -178,7 +196,7 @@ Simulation is point-in-time and provider-dependent. It cannot guarantee later ex
 
 ## Security boundaries
 
-- SSIG binds only to loopback and rejects non-loopback `Host` headers to reduce DNS-rebinding risk.
+- SSIG binds only to loopback by default. LAN mode is explicit, RFC1918-only, and allowlists one exact `Host` value to reduce DNS-rebinding risk.
 - The approval API uses a random 256-bit bearer token. The browser stores it in session storage and immediately removes it from the URL.
 - API responses are `no-store`, the UI cannot be framed, and a restrictive Content Security Policy is applied.
 - The server validates the connected wallet against `expectedSigner` again when recording completion.
